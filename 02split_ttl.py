@@ -45,11 +45,13 @@ def run(argv):
 
 
 if __name__ == "__main__":
+    #filelist=[
+    #        "data01/expressionatlas/latest/E-MTAB-2706.ttl",
+    #        "data01/biosample/latest/bioschemas.ttl",
+    #        "data01/expressionatlas/latest/E-MTAB-2770.ttl",
+    #        "data01/expressionatlas/latest/E-MTAB-4748.ttl"]
     filelist=[
-            "data01/expressionatlas/latest/E-MTAB-2706.ttl",
-            "data01/biosample/latest/bioschemas.ttl",
-            "data01/expressionatlas/latest/E-MTAB-2770.ttl",
-            "data01/expressionatlas/latest/E-MTAB-4748.ttl"]
+            "data01/wikidata/latest/latest-all.ttl"]
     for filename in filelist:
         path=os.path.dirname(filename)
         name=os.path.basename(filename)
