@@ -1,7 +1,19 @@
 from rdflib import Graph
 import glob
 import os
-from multiprocessing import Pool
+from multiprocessing import Pool,TimeoutError
+
+def get_timeout(p,args):
+    try:
+        print(p,args)
+        return p.get(timeout=60*60)
+    except TimeoutError:
+        print("timeout:",args)
+        return None
+    except:
+        print("error:",args)
+        return None
+
 
 def conv(filename, out_filename):
     g = Graph()
@@ -18,11 +30,14 @@ def conv_xml(filename, out_filename):
 def run(argv):
     filename, out_filename, mode = argv
     print(">>",filename)
-    if mode=="xml" or mode=="rdf":
-        conv_xml(filename, out_filename)
-    else:
-        conv(filename, out_filename)
-
+    try:
+        if mode=="xml" or mode=="rdf":
+            conv_xml(filename, out_filename)
+        else:
+            conv(filename, out_filename)
+    except:
+        print("error:",argv)
+        return None
 
 def main_conv(mode, n_jobs):
     data=[]
@@ -47,7 +62,10 @@ def main_conv(mode, n_jobs):
             data.append((filename, out_filename, mode))
         else:
             print("[EXIST]", out_filename)
-    p = Pool(n_jobs) # プロセス数を4に設定
-    p.map(run, data)
+    pool = Pool(n_jobs) # プロセス数を4に設定
+    pids=[(pool.apply_async(run, (args,)),args) for args in data]
+    results=[get_timeout(p,args) for p,args in pids]
+
+    #p.map(run, data)
 
 
