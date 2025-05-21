@@ -1,5 +1,5 @@
 # RDFPreprocessor
-生命科学関連RDFからのデータセット構築をするプロジェクトで、以下ファイルから構成される
+生命科学関連RDF ([RDF portal][https://rdfportal.org/]) からのデータセット構築をするプロジェクトで、以下ファイルから構成される
 ## Script: 00-01 
 - RDF portal からのRDFをダウンロードスクリプト
 - 10GBごとに分割スクリプト
