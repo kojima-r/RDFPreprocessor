@@ -5,8 +5,8 @@ from multiprocessing import Pool
 
 def conv(filename, out_filename):
     g = Graph()
-    #g.parse(filename, format="ntriples")
-    g.parse(filename, format="ttl")
+    g.parse(filename, format="ntriples")
+    #g.parse(filename, format="ttl")
     with open(out_filename,"w") as ofp:
         for s, p, o in g:
             ss=str(s).replace("\r\n","  ").replace("\n","  ").replace("\t","  ")
@@ -24,8 +24,8 @@ def run(argv):
 
 if __name__ == "__main__":
     data=[]
-    #target="data04/**/*.nt"
-    target="data03/**/*.ttl"
+    target="data04/**/*.nt"
+    #target="data03/**/*.ttl"
     for filename in glob.glob(target,recursive=True):
         path=os.path.dirname(filename)
         name=os.path.basename(filename)
