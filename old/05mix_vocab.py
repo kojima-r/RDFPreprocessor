@@ -2,13 +2,15 @@ import glob
 import os
 import joblib
 
+def conv_bnode(node_name, filename):
+    return filename+"_"+node_name
 node_vocab={}
 edge_vocab={}
 literal_cnt=0
 
 if __name__ == "__main__":
     data=[]
-    target="data05/**/*.tsv"
+    target="data04/**/*.tsv"
     ofp=open("literal.tsv","w")
     for filename in glob.glob(target,recursive=True):
         #fp=open("data05/biosample/latest/bioschemas.0000.tsv")
@@ -18,6 +20,12 @@ if __name__ == "__main__":
         for line in fp:
             arr=line.split("\t")
             nt1,nt2,nt3, n1,n2,n3=arr
+
+            # BNode
+            if nt1=="BNode":
+                n1=conv_bnode(n1,filename)
+            if nt3=="BNode":
+                n3=conv_bnode(n3,filename)
             if nt3=="Literal":
                 ofp.write(line)
                 literal_cnt+=1

@@ -14,7 +14,8 @@ def conv(filename, out_filename):
             line="\t".join([str(type(s).__name__),str(type(p).__name__),  str(type(o).__name__), ss,pp,oo])
             ofp.write(line)
             ofp.write("\n")
+    print("[save]",out_filename)
 
-conv("data04/owl/latest/owl.nt", "test.tsv")
+conv("data03/owl/latest/owl.nt", "test.tsv")
 
 

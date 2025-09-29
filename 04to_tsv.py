@@ -24,17 +24,20 @@ def run(argv):
 
 if __name__ == "__main__":
     data=[]
-    target="data04/**/*.nt"
+    target="data03/**/*.nt"
     #target="data03/**/*.ttl"
     for filename in glob.glob(target,recursive=True):
         path=os.path.dirname(filename)
         name=os.path.basename(filename)
-        path1="data05"+path[6:]
+        path1="data04"+path[6:]
         os.makedirs(path1,exist_ok=True)
         filename = path+"/"+name
         name_, _=os.path.splitext(name)
         out_filename = path1+"/"+name_+".tsv"
-        print(filename, out_filename)
-        data.append((filename, out_filename))
+        if not os.path.isfile(out_filename):
+            print(filename, out_filename)
+            data.append((filename, out_filename))
+        else:
+            print("[EXIST]", out_filename)
     p = Pool(8)
     p.map(run, data)

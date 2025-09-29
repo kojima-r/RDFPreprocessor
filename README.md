@@ -8,6 +8,10 @@
 pip install beautifulsoup4
 pip install rdflib
 ```
+raptorを使う場合
+```
+sudo apt install raptor2-utils
+```
 
 ## Script: 00
 - RDF portal からダウンロード予定のRDF一覧を作成する
