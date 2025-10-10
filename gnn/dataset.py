@@ -2,9 +2,10 @@
 import os
 import torch
 from torch_geometric.data import Data, InMemoryDataset
+from typing import List
 
 def load_edge_list_tsv(
-    tsv_path: str,
+    tsv_path_list: List[str],
     has_header: bool = False,
     undirected: bool = False,
     assume_zero_based: bool = None,
@@ -22,21 +23,21 @@ def load_edge_list_tsv(
         - True: ノードIDが飛び番/任意の整数でも 0..N-1 に詰め替える
     """
     src_list, eid_list, dst_list = [], [], []
-
-    with open(tsv_path, "r", encoding="utf-8") as f:
-        if has_header:
-            next(f)
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            cols = line.split("\t")
-            if len(cols) < 3:
-                raise ValueError(f"3列必要ですが: {line}")
-            s, e, d = cols[0], cols[1], cols[2]
-            src_list.append(int(s))
-            eid_list.append(int(e))
-            dst_list.append(int(d))
+    for tsv_path in tsv_path_list:
+        with open(tsv_path, "r", encoding="utf-8") as f:
+            if has_header:
+                next(f)
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                cols = line.split("\t")
+                if len(cols) < 3:
+                    raise ValueError(f"3列必要ですが: {line}")
+                s, e, d = cols[0], cols[1], cols[2]
+                src_list.append(int(s))
+                eid_list.append(int(e))
+                dst_list.append(int(d))
 
     src = torch.tensor(src_list, dtype=torch.long)
     dst = torch.tensor(dst_list, dtype=torch.long)
@@ -73,14 +74,14 @@ def load_edge_list_tsv(
 
 
 def build_data_from_tsv(
-    tsv_path: str,
+    tsv_path_list: List[str],
     has_header: bool = False,
     undirected: bool = False,
     assume_zero_based: bool = None,
     remap_non_contiguous: bool = True,
 ) -> Data:
     edge_index, edge_id, num_nodes = load_edge_list_tsv(
-        tsv_path,
+        tsv_path_list,
         has_header=has_header,
         undirected=undirected,
         assume_zero_based=assume_zero_based,
@@ -103,7 +104,7 @@ class SingleGraphTSVDataset(InMemoryDataset):
     """
     def __init__(
         self,
-        tsv_path: str,
+        tsv_path_list: List[str],
         has_header: bool = False,
         undirected: bool = False,
         assume_zero_based: bool = None,
@@ -111,7 +112,7 @@ class SingleGraphTSVDataset(InMemoryDataset):
         transform=None,
         pre_transform=None,
     ):
-        self.tsv_path = tsv_path
+        self.tsv_path_list = tsv_path_list
         self.has_header = has_header
         self.undirected = undirected
         self.assume_zero_based = assume_zero_based
@@ -119,7 +120,7 @@ class SingleGraphTSVDataset(InMemoryDataset):
         super().__init__(".", transform, pre_transform)
 
         data = build_data_from_tsv(
-            tsv_path=self.tsv_path,
+            tsv_path_list=self.tsv_path_list,
             has_header=self.has_header,
             undirected=self.undirected,
             assume_zero_based=self.assume_zero_based,
@@ -141,7 +142,7 @@ class SingleGraphTSVDataset(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        return [os.path.basename(self.tsv_path)]
+        return [os.path.basename(path) for path in self.tsv_path_list]
 
     @property
     def processed_file_names(self):
@@ -153,7 +154,7 @@ class SingleGraphTSVDataset(InMemoryDataset):
 if __name__ == "__main__":
     # 例: tsv の各行が "src \t edge_id \t dst"
     # 1) 直接 Data を作成
-    filename="../data06/pubchem.graph.tsv"
+    filename=["../data06/pubchem.graph.tsv"]
     data = build_data_from_tsv(filename, has_header=False, undirected=False)
     print(data)
     print(data.edge_index.shape, data.num_nodes, data.edge_id[:5] if data.edge_id.numel() else None)

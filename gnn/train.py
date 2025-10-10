@@ -43,10 +43,31 @@ def evaluate_ranking(z, pos_edge_index, num_nodes, k=10, neg_per_pos=100, seed=1
     ndcgk = sum(ndcgs) / len(ndcgs)
     return float(mrr), float(hitk), float(ndcgk)
 
+# --- 追加: ラベルからpos/negに分けるユーティリティ ---
+def split_pos_neg_from_edge_labels(split_data):
+    # split_data: val_data or test_data
+    idx = split_data.edge_label_index      # [2, M]
+    y   = split_data.edge_label            # [M], 1=pos, 0=neg
+    pos = idx[:, y == 1]
+    neg = idx[:, y == 0]
+    return pos, neg
+
+@torch.no_grad()
+def evaluate_auc_from_split(z, split_data):
+    pos_idx, neg_idx = split_pos_neg_from_edge_labels(split_data)
+    return evaluate_auc(z, pos_idx, neg_idx)
+
+@torch.no_grad()
+def evaluate_ranking_from_split(z, split_data, num_nodes, k=10, neg_per_pos=100):
+    pos_idx, _ = split_pos_neg_from_edge_labels(split_data)
+    return evaluate_ranking(z, pos_idx, num_nodes, k=k, neg_per_pos=neg_per_pos)
+
 def main():
     # ===== データ読み込み =====
-    filename="../data06/pubchem.graph.tsv"
-    dataset = SingleGraphTSVDataset(filename, has_header=False, undirected=False)
+    filenames=[
+            #"../data06/pubchem.graph.tsv",
+            "../data06/pubmed.graph.tsv"]
+    dataset = SingleGraphTSVDataset(filenames, has_header=False, undirected=False)
     data: Data = dataset[0]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -75,7 +96,8 @@ def main():
     optimizer = torch.optim.SparseAdam(list(model.parameters()), lr=0.01)
 
     # 学習ループ
-    for epoch in range(1, 6):
+    n_epoch=100
+    for epoch in range(1, n_epoch):
         model.train()
         total_loss = 0
         for pos_rw, neg_rw in loader:
@@ -88,9 +110,14 @@ def main():
         # 評価
         model.eval()
         z = model().detach()
+        
+        #auc = evaluate_auc(z, test_data.pos_edge_label_index, test_data.neg_edge_label_index)
+        #mrr, hit10, ndcg10 = evaluate_ranking(z, test_data.pos_edge_label_index, data.num_nodes, k=10)
+        auc = evaluate_auc_from_split(z, test_data)
+        mrr, hit10, ndcg10 = evaluate_ranking_from_split(
+            z, test_data, data.num_nodes, k=10, neg_per_pos=100
+            )
 
-        auc = evaluate_auc(z, test_data.pos_edge_label_index, test_data.neg_edge_label_index)
-        mrr, hit10, ndcg10 = evaluate_ranking(z, test_data.pos_edge_label_index, data.num_nodes, k=10)
 
         print(f"Epoch {epoch:03d} | loss={total_loss:.4f} "
               f"| AUC={auc:.4f} | MRR={mrr:.4f} | Hit@10={hit10:.4f} | nDCG@10={ndcg10:.4f}")
