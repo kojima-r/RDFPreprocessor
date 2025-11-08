@@ -24,6 +24,13 @@ def run(argv):
             arr=line.split("\t")
             nt1,nt2,nt3, n1,n2,n3=arr
             if nt3=="Literal":
+                if n1 not in node_vocab:
+                    n1_i=len(node_vocab)
+                    node_vocab[n1]=n1_i
+                else:
+                    n1_i=node_vocab[n1]
+                ofp.write(str(n1_i))
+                ofp.write("\n")
                 ofp.write(line)
                 literal_cnt+=1
             else:
