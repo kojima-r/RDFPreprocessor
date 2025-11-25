@@ -1,0 +1,4 @@
+#docker run --rm --name dgraph-bulk   --security-opt seccomp=unconfined   --ulimit nproc=65535:65535   --ulimit nofile=100000:100000   -e MALLOC_CONF=background_thread:false   -v /data2/dgraph/json:/import   -v /data2/dgraph/schema:/schema   -v /data2/dgraph/out:/out   dgraph/dgraph:latest   dgraph bulk     -f "./data/*.json.gz"     -s /schema/schema.dql     --out /out     --map_shards=4     --reduce_shards=1     --http localhost:8000
+
+sudo docker run --rm --name dgraph-bulk   --security-opt seccomp=unconfined   --ulimit nproc=65535:65535   --ulimit nofile=100000:100000   -e MALLOC_CONF=background_thread:false   -v /data2/dgraph/import:/import   -v /data2/dgraph/schema:/schema   -v /data2/dgraph/out:/out   dgraph/dgraph:latest   dgraph bulk     -f "/import/data/people_part-0001.tsv.json.gz"     -s /schema/schema.dql     --out /out/bulk-$(date +%Y%m%d-%H%M%S)    --map_shards=4     --reduce_shards=1     --http localhost:8000"
+
