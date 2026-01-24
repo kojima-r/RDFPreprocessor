@@ -17,13 +17,14 @@ def get_node_dict(filename):
 target="data05/**/node.tsv"
 #src_filename="data05/bgee/node.tsv"
 #out_filename="data05/bgee/shared_node.tsv"
+skip_exist=False
 for src_filename in glob.glob(target,recursive=True):
     #print(src_filename)
     dname=os.path.dirname(src_filename)
     out_filename=dname+"/shared_node.tsv"
     print(out_filename)
 
-    if os.path.isfile(out_filename):
+    if skip_exist and os.path.isfile(out_filename):
         print("[EXIST]", out_filename)
     else:
         node_dict = get_node_dict(src_filename)

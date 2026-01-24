@@ -5,17 +5,19 @@ from multiprocessing import Pool
 
 
 def conv_bnode(node_name, filename):
-    return filename+"_"+node_name
+    fname=os.path.basename(filename)
+    return fname+"_"+node_name
 
 def run(argv):
     target_dir,out_dir=argv
     node_vocab={}
     edge_vocab={}
-    literal_cnt=0
+    print("...start:",target_dir)
     ofp=open(out_dir+"/literal.tsv","w")
     ofp_node=open(out_dir+"/node.tsv","w")
     ofp_edge=open(out_dir+"/edge.tsv","w")
     ofp_graph=open(out_dir+"/graph.tsv","w")
+    literal_cnt=0
     for filename in glob.glob(target_dir+"/**/*.tsv",recursive=True):
         #fp=open("data05/biosample/latest/bioschemas.0000.tsv")
         print(">>",filename)
@@ -27,10 +29,12 @@ def run(argv):
                 if n1 not in node_vocab:
                     n1_i=len(node_vocab)
                     node_vocab[n1]=n1_i
+                    ofp_node.write("\t".join([str(n1_i),nt1,n1]))
+                    ofp_node.write("\n")
                 else:
                     n1_i=node_vocab[n1]
                 ofp.write(str(n1_i))
-                ofp.write("\n")
+                ofp.write("\t")
                 ofp.write(line)
                 literal_cnt+=1
             else:
@@ -70,7 +74,10 @@ def run(argv):
     print("#node",len(node_vocab))
     print("#edge",len(edge_vocab))
     print("#literal",literal_cnt)
-
+    ofp.close()
+    ofp_node.close()
+    ofp_edge.close()
+    ofp_graph.close()
     #with open(target_dir+"/node_vocab.jbl", mode="wb") as ofp:
     #    joblib.dump(node_vocab, ofp, compress=3)
     #with open(target_dir++"/edge_vocab.jbl", mode="wb") as ofp:
@@ -87,5 +94,8 @@ if __name__ == "__main__":
         out_path="data05/"+name
         os.makedirs(out_path,exist_ok=True)
         data.append((path, out_path))
-    p = Pool(1)
-    p.map(run, data)
+    #p = Pool(1)
+    #p.map(run, data)
+    for i,argv in enumerate(data):
+        print("...",i,"/",len(data))
+        run(argv)

@@ -13,6 +13,16 @@ raptorを使う場合
 sudo apt install raptor2-utils
 ```
 
+## メモリが足りない場合
+以下のコマンドを用いてスワップ領域を一時的に増やすことなどを検討する
+```
+sudo dd if=/dev/zero of=/var/swapfile bs=1024 count=104857600
+sudo chmod 666 /var/swapfile
+sudo mkswap /var/swapfile 104857600
+sudo chmod 600 /var/swapfile
+sudo swapon -s
+```
+
 ## Script: 00
 - RDF portal からダウンロード予定のRDF一覧を作成する
 

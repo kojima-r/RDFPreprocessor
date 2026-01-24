@@ -11,3 +11,11 @@ for filename in glob.glob(target,recursive=True):
     out="data06/"+name+".graph.tsv"
     print(out)
     shutil.copy(filename,out)
+    ##
+    filename=dname+"/node_list.global.tsv"
+    out="data06/"+name+".node.tsv"
+    shutil.copy(filename,out)
+    ##
+    filename=dname+"/literal.global.tsv"
+    out="data06/"+name+".literal.tsv"
+    shutil.copy(filename,out)

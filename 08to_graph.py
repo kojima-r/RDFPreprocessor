@@ -26,12 +26,13 @@ target="data05/**/shared_edge.tsv"
 
 for filename in glob.glob(target,recursive=True):
     dname=os.path.dirname(filename)
-
+    # shared_edge.tsv
     print(">>",filename)
     edge_mapping = get_shared_edge_mapping(filename)
     node_filename=dname+"/node.global.tsv"
     print(">>",node_filename)
     node_mapping = get_shared_node_mapping(node_filename)
+    
     g_filename=dname+"/graph.tsv"
     out_filename=dname+"/shared_graph.tsv"
     print(">>>>",out_filename)
