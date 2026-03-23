@@ -18,7 +18,7 @@ COPY (
     '{target_filename}',
     delim='\t',
     header=true,
-    columns={{'c1':'BIGINT', 'c2':'BIGINT', 'c3':'BIGINT'}},
+    columns={{'c1':'BIGINT', 'c2':'STRING', 'c3':'STRING'}},
     sample_size=-1
   )
 )
@@ -26,9 +26,9 @@ TO '{outfilename}'
 (FORMAT PARQUET, COMPRESSION ZSTD);
 """)
 
-os.makedirs("data08",exist_ok=True)
+os.makedirs("data08_node",exist_ok=True)
 
-for filename in glob.glob("data06_uniq/*.graph.tsv"):
+for filename in glob.glob("data06/*.node.tsv"):
     bname = os.path.basename(filename)
     name,_ = os.path.splitext(bname)
     
@@ -36,5 +36,5 @@ for filename in glob.glob("data06_uniq/*.graph.tsv"):
     #target_filename="data06_uniq/bgee.graph.tsv"
     #outfilename="data08/bgee.graph.parquet"
     if os.path.getsize(filename)>10:
-        run(filename, "data08/"+name+".parquet")
+        run(filename, "data08_node/"+name+".parquet")
 

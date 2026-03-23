@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=2 python 31kg_stream.py --train_paths ./data10/bgee.graph.train.tsv --test_paths ./data10/bgee.graph.test.tsv --valid_paths ./data10/bgee.graph.valid.tsv --output_dir data10_output

@@ -1,5 +1,5 @@
 mkdir -p data06_sort
-for f in `ls data06/*.tsv`
+for f in `ls data06/*.graph.tsv`
 do
 	echo $f
 	name=`basename $f`

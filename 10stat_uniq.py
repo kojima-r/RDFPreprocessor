@@ -32,13 +32,13 @@ def save_degree(filename, out_filename, out_dist_filename):
             fp.write("\n")
     
 def run_out(name):
-    os.makedirs("stat06_sort",exist_ok=True)
-    filename="data06_sort/{}.graph.tsv".format(name)
-    deg_filename="stat06_sort/{}.odegree.tsv".format(name)
-    degdist_filename="stat06_sort/{}.odegree_dist.tsv".format(name)
+    os.makedirs("stat06_uniq",exist_ok=True)
+    filename="data06_uniq/{}.graph.tsv".format(name)
+    deg_filename="stat06_uniq/{}.odegree.tsv".format(name)
+    degdist_filename="stat06_uniq/{}.odegree_dist.tsv".format(name)
     save_degree(filename, deg_filename, degdist_filename)
 
-target="data06_sort/*.graph.tsv"
+target="data06_uniq/*.graph.tsv"
 for filename in glob.glob(target,recursive=True):
     bname=os.path.basename(filename)
     name1,_ = os.path.splitext(bname)

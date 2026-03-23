@@ -1,5 +1,5 @@
 mkdir -p data06_uniq
-for f in `ls data06_sort/*.tsv`
+for f in `ls data06_sort/*.graph.tsv`
 do
 	echo $f
 	name=`basename $f`
