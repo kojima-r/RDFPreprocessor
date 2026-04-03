@@ -111,7 +111,6 @@ class KGEModel(nn.Module):
     def score_all_heads(self, r_idx, t_idx):
         raise NotImplementedError
 
-
 class TransE(KGEModel):
     def __init__(self, num_entities, num_relations, emb_dim, margin=1.0, p_norm=1):
         super().__init__(num_entities, num_relations, emb_dim)
@@ -131,19 +130,35 @@ class TransE(KGEModel):
         return -torch.norm(h + r - t, p=self.p_norm, dim=-1)
 
     def score_all_tails(self, h_idx, r_idx):
-        h = self.entity_emb(h_idx)
-        r = self.relation_emb(r_idx)
-        all_t = self.entity_emb.weight
-        x = h + r
-        return -torch.cdist(x, all_t, p=self.p_norm)
+        h = self.entity_emb(h_idx)              # [B, D]
+        r = self.relation_emb(r_idx)            # [B, D]
+        all_t = self.entity_emb.weight          # [E, D]
+        x = h + r                               # [B, D]
+
+        # [B, 1, D] - [1, E, D] -> [B, E, D]
+        diff = x.unsqueeze(1) - all_t.unsqueeze(0)
+
+        if self.p_norm == 1:
+            return -diff.abs().sum(dim=-1)      # [B, E]
+        elif self.p_norm == 2:
+            return -torch.sqrt(torch.clamp((diff * diff).sum(dim=-1), min=1e-12))
+        else:
+            return -torch.norm(diff, p=self.p_norm, dim=-1)
 
     def score_all_heads(self, r_idx, t_idx):
-        r = self.relation_emb(r_idx)
-        t = self.entity_emb(t_idx)
-        all_h = self.entity_emb.weight
-        x = t - r
-        return -torch.cdist(x, all_h, p=self.p_norm)
+        r = self.relation_emb(r_idx)            # [B, D]
+        t = self.entity_emb(t_idx)              # [B, D]
+        all_h = self.entity_emb.weight          # [E, D]
+        x = t - r                               # [B, D]
 
+        diff = x.unsqueeze(1) - all_h.unsqueeze(0)
+
+        if self.p_norm == 1:
+            return -diff.abs().sum(dim=-1)
+        elif self.p_norm == 2:
+            return -torch.sqrt(torch.clamp((diff * diff).sum(dim=-1), min=1e-12))
+        else:
+            return -torch.norm(diff, p=self.p_norm, dim=-1)
 
 class DistMult(KGEModel):
     def score(self, h_idx, r_idx, t_idx):
@@ -233,6 +248,14 @@ def build_filter_dict(all_triples):
 
     return hr_to_t, rt_to_h
 
+def _batch_filter_lists_tail(batch, hr_to_t):
+    return [hr_to_t[(h, r)] for h, r, _ in batch]
+
+
+def _batch_filter_lists_head(batch, rt_to_h):
+    return [rt_to_h[(r, t)] for _, r, t in batch]
+
+
 def _make_padded_filter_index(
     keys: List[Tuple[int, int]],
     filter_dict: Dict[Tuple[int, int], List[int]],
@@ -256,6 +279,181 @@ def _make_padded_filter_index(
 
     return padded_idx, valid_mask
 
+@torch.no_grad()
+def _score_tail_chunk(model, h, r, cand_idx):
+    """
+    h, r: [B]
+    cand_idx: [C]
+    return: [B, C]
+    """
+    # DistMult は score_all_tails の部分式を chunk 化
+    if hasattr(model, "__class__") and model.__class__.__name__.lower() == "distmult":
+        h_emb = model.entity_emb(h)              # [B, D]
+        r_emb = model.relation_emb(r)            # [B, D]
+        x = h_emb * r_emb                        # [B, D]
+        cand_emb = model.entity_emb(cand_idx)    # [C, D]
+        return x @ cand_emb.t()                  # [B, C]
+
+    # TransE は cdist を使わず chunk ごとに距離計算
+    elif hasattr(model, "__class__") and model.__class__.__name__.lower() == "transe":
+        h_emb = model.entity_emb(h)              # [B, D]
+        r_emb = model.relation_emb(r)            # [B, D]
+        x = h_emb + r_emb                        # [B, D]
+        cand_emb = model.entity_emb(cand_idx)    # [C, D]
+
+        diff = x.unsqueeze(1) - cand_emb.unsqueeze(0)   # [B, C, D]
+        p_norm = getattr(model, "p_norm", 1)
+
+        if p_norm == 1:
+            return -diff.abs().sum(dim=-1)
+        elif p_norm == 2:
+            return -torch.sqrt(torch.clamp((diff * diff).sum(dim=-1), min=1e-12))
+        else:
+            return -torch.norm(diff, p=p_norm, dim=-1)
+
+    else:
+        # 汎用 fallback: 各候補ごとに score() を使う
+        B = h.size(0)
+        C = cand_idx.size(0)
+        hh = h.unsqueeze(1).expand(B, C).reshape(-1)
+        rr = r.unsqueeze(1).expand(B, C).reshape(-1)
+        tt = cand_idx.unsqueeze(0).expand(B, C).reshape(-1)
+        scores = model.score(hh, rr, tt).view(B, C)
+        return scores
+
+
+@torch.no_grad()
+def _score_head_chunk(model, r, t, cand_idx):
+    """
+    r, t: [B]
+    cand_idx: [C]
+    return: [B, C]
+    """
+    if hasattr(model, "__class__") and model.__class__.__name__.lower() == "distmult":
+        r_emb = model.relation_emb(r)            # [B, D]
+        t_emb = model.entity_emb(t)              # [B, D]
+        x = r_emb * t_emb                        # [B, D]
+        cand_emb = model.entity_emb(cand_idx)    # [C, D]
+        return x @ cand_emb.t()                  # [B, C]
+
+    elif hasattr(model, "__class__") and model.__class__.__name__.lower() == "transe":
+        r_emb = model.relation_emb(r)            # [B, D]
+        t_emb = model.entity_emb(t)              # [B, D]
+        x = t_emb - r_emb                        # [B, D]
+        cand_emb = model.entity_emb(cand_idx)    # [C, D]
+
+        diff = x.unsqueeze(1) - cand_emb.unsqueeze(0)   # [B, C, D]
+        p_norm = getattr(model, "p_norm", 1)
+
+        if p_norm == 1:
+            return -diff.abs().sum(dim=-1)
+        elif p_norm == 2:
+            return -torch.sqrt(torch.clamp((diff * diff).sum(dim=-1), min=1e-12))
+        else:
+            return -torch.norm(diff, p=p_norm, dim=-1)
+
+    else:
+        B = r.size(0)
+        C = cand_idx.size(0)
+        hh = cand_idx.unsqueeze(0).expand(B, C).reshape(-1)
+        rr = r.unsqueeze(1).expand(B, C).reshape(-1)
+        tt = t.unsqueeze(1).expand(B, C).reshape(-1)
+        scores = model.score(hh, rr, tt).view(B, C)
+        return scores
+
+
+@torch.no_grad()
+def _compute_tail_ranks_chunked(
+    model,
+    h,
+    r,
+    t,
+    batch,
+    num_entities,
+    device,
+    filtered=False,
+    hr_to_t=None,
+    entity_chunk_size=50000,
+):
+    """
+    return: [B] rank
+    """
+    true_scores = model.score(h, r, t)  # [B]
+    ranks = torch.ones(h.size(0), dtype=torch.long, device=device)
+
+    filter_lists = None
+    if filtered:
+        filter_lists = _batch_filter_lists_tail(batch, hr_to_t)
+
+    for start in range(0, num_entities, entity_chunk_size):
+        end = min(start + entity_chunk_size, num_entities)
+        cand_idx = torch.arange(start, end, dtype=torch.long, device=device)  # [C]
+
+        scores = _score_tail_chunk(model, h, r, cand_idx)  # [B, C]
+
+        if filtered:
+            # 各行ごとに filtered candidate を潰す
+            for i, (_, _, true_t) in enumerate(batch):
+                filt = filter_lists[i]
+                if not filt:
+                    continue
+
+                # chunk 内にあるものだけ対象
+                cols = [x - start for x in filt if start <= x < end and x != true_t]
+                if cols:
+                    col_idx = torch.tensor(cols, dtype=torch.long, device=device)
+                    scores[i, col_idx] = -1e9
+
+        ranks += (scores > true_scores.unsqueeze(1)).sum(dim=1)
+
+    return ranks
+
+
+@torch.no_grad()
+def _compute_head_ranks_chunked(
+    model,
+    h,
+    r,
+    t,
+    batch,
+    num_entities,
+    device,
+    filtered=False,
+    rt_to_h=None,
+    entity_chunk_size=50000,
+):
+    """
+    return: [B] rank
+    """
+    true_scores = model.score(h, r, t)  # [B]
+    ranks = torch.ones(h.size(0), dtype=torch.long, device=device)
+
+    filter_lists = None
+    if filtered:
+        filter_lists = _batch_filter_lists_head(batch, rt_to_h)
+
+    for start in range(0, num_entities, entity_chunk_size):
+        end = min(start + entity_chunk_size, num_entities)
+        cand_idx = torch.arange(start, end, dtype=torch.long, device=device)  # [C]
+
+        scores = _score_head_chunk(model, r, t, cand_idx)  # [B, C]
+
+        if filtered:
+            for i, (true_h, _, _) in enumerate(batch):
+                filt = filter_lists[i]
+                if not filt:
+                    continue
+
+                cols = [x - start for x in filt if start <= x < end and x != true_h]
+                if cols:
+                    col_idx = torch.tensor(cols, dtype=torch.long, device=device)
+                    scores[i, col_idx] = -1e9
+
+        ranks += (scores > true_scores.unsqueeze(1)).sum(dim=1)
+
+    return ranks
+
+
 
 @torch.no_grad()
 def evaluate(
@@ -265,67 +463,73 @@ def evaluate(
     device,
     batch_size=128,
     filtered=True,
+    entity_chunk_size=50000,
 ):
+    """
+    Args:
+        model:
+            学習済みモデル
+        triples:
+            評価対象 triple list
+        all_triples:
+            filtered=True のときに使う既知 triple 全体
+        device:
+            torch device
+        batch_size:
+            評価バッチサイズ
+        filtered:
+            True なら filtered ranking
+            False なら unfiltered ranking
+        entity_chunk_size:
+            entity 候補を何件ずつ分割して採点するか
+    """
     model.eval()
+
+    if filtered and all_triples is None:
+        raise ValueError("filtered=True のときは all_triples が必要です")
 
     hr_to_t = None
     rt_to_h = None
     if filtered:
         hr_to_t, rt_to_h = build_filter_dict(all_triples)
 
+    num_entities = model.entity_emb.num_embeddings
     ranks = []
 
     for start in range(0, len(triples), batch_size):
         batch = triples[start:start + batch_size]
-        bsz = len(batch)
 
         h = torch.tensor([x[0] for x in batch], dtype=torch.long, device=device)
         r = torch.tensor([x[1] for x in batch], dtype=torch.long, device=device)
         t = torch.tensor([x[2] for x in batch], dtype=torch.long, device=device)
 
-        row_ids = torch.arange(bsz, device=device)
+        tail_ranks = _compute_tail_ranks_chunked(
+            model=model,
+            h=h,
+            r=r,
+            t=t,
+            batch=batch,
+            num_entities=num_entities,
+            device=device,
+            filtered=filtered,
+            hr_to_t=hr_to_t,
+            entity_chunk_size=entity_chunk_size,
+        )
+        ranks.extend(tail_ranks.tolist())
 
-        # -------------------------
-        # tail prediction
-        # -------------------------
-        tail_scores = model.score_all_tails(h, r)
-        true_tail_scores = tail_scores[row_ids, t].clone()
-
-        if filtered:
-            hr_keys = [(hh, rr) for hh, rr, _ in batch]
-            tail_filter_idx, tail_valid_mask = _make_padded_filter_index(hr_keys, hr_to_t, device)
-
-            if tail_filter_idx.numel() > 0:
-                # 正解 tail は消さない
-                tail_valid_mask = tail_valid_mask & (tail_filter_idx != t.unsqueeze(1))
-
-                mask_rows = row_ids.unsqueeze(1).expand_as(tail_filter_idx)[tail_valid_mask]
-                mask_cols = tail_filter_idx[tail_valid_mask]
-                tail_scores[mask_rows, mask_cols] = -1e9
-
-        tail_rank = 1 + torch.sum(tail_scores > true_tail_scores.unsqueeze(1), dim=1)
-        ranks.extend(tail_rank.tolist())
-
-        # -------------------------
-        # head prediction
-        # -------------------------
-        head_scores = model.score_all_heads(r, t)
-        true_head_scores = head_scores[row_ids, h].clone()
-
-        if filtered:
-            rt_keys = [(rr, tt) for _, rr, tt in batch]
-            head_filter_idx, head_valid_mask = _make_padded_filter_index(rt_keys, rt_to_h, device)
-
-            if head_filter_idx.numel() > 0:
-                # 正解 head は消さない
-                head_valid_mask = head_valid_mask & (head_filter_idx != h.unsqueeze(1))
-
-                mask_rows = row_ids.unsqueeze(1).expand_as(head_filter_idx)[head_valid_mask]
-                mask_cols = head_filter_idx[head_valid_mask]
-                head_scores[mask_rows, mask_cols] = -1e9
-
-        head_rank = 1 + torch.sum(head_scores > true_head_scores.unsqueeze(1), dim=1)
-        ranks.extend(head_rank.tolist())
+        head_ranks = _compute_head_ranks_chunked(
+            model=model,
+            h=h,
+            r=r,
+            t=t,
+            batch=batch,
+            num_entities=num_entities,
+            device=device,
+            filtered=filtered,
+            rt_to_h=rt_to_h,
+            entity_chunk_size=entity_chunk_size,
+        )
+        ranks.extend(head_ranks.tolist())
 
     ranks = torch.tensor(ranks, dtype=torch.float)
     mrr = torch.mean(1.0 / ranks).item()
@@ -379,6 +583,16 @@ def save_embeddings(output_dir, model, id2ent, id2rel):
     print(f"Saved relation embeddings to: {relation_path}")
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    v = v.lower()
+    if v in ("true", "1", "yes", "y"):
+        return True
+    if v in ("false", "0", "no", "n"):
+        return False
+    raise ValueError(f"invalid bool: {v}")
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_path", type=str, required=True, help="TSV triple file path")
@@ -393,6 +607,9 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output_dir", type=str, default="./output_kg")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--filtered_eval", type=str2bool, default=True)
+    parser.add_argument("--eval_batch_size", type=int, default=32)
+    parser.add_argument("--entity_chunk_size", type=int, default=20000)
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -444,13 +661,14 @@ def main():
             num_entities=num_entities,
             margin=args.margin,
         )
-
         valid_result = evaluate(
             model=model,
             triples=valid_triples,
-            all_triples=all_known_triples,
+            all_triples=all_known_triples if args.filtered_eval else None,
             device=device,
-            batch_size=args.batch_size,
+            batch_size=args.eval_batch_size,
+            filtered=args.filtered_eval,
+            entity_chunk_size=args.entity_chunk_size,
         )
 
         print(

@@ -129,7 +129,7 @@ def batch_iterator(
 class KGEModel(nn.Module):
     def __init__(self, num_entities, num_relations, emb_dim):
         super().__init__()
-        self.entity_emb = nn.Embedding(num_entities, emb_dim)
+        self.entity_emb = nn.Embedding(num_entities, emb_dim, sparse=True)
         self.relation_emb = nn.Embedding(num_relations, emb_dim)
         self.reset_parameters()
 
@@ -357,8 +357,8 @@ def main():
     parser.add_argument("--metadata_path", type=str, default=None)
 
     parser.add_argument("--model", type=str, default="transe", choices=["transe", "distmult"])
-    parser.add_argument("--emb_dim", type=int, default=100)
-    parser.add_argument("--batch_size", type=int, default=1024)
+    parser.add_argument("--emb_dim", type=int, default=16)
+    parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--margin", type=float, default=1.0)
@@ -385,6 +385,8 @@ def main():
                 meta = json.load(f)
             num_entities = int(meta["num_entities"])
             num_relations = int(meta["num_relations"])
+            print("#entities:",num_entities)
+            print("#relations:",num_relations)
         else:
             print("...infering counts")
             num_entities, num_relations = infer_counts_from_mapped_files(
